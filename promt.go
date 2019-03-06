@@ -1,4 +1,4 @@
-package main
+package cobraUtils
 
 import (
 	"github.com/manifoldco/promptui"
