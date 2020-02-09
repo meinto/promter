@@ -3,5 +3,5 @@
 ## Installation
 
 ```bash
-go get -u gopkg.in/meinto/cobra-utils.v0
+go get github.com/meinto/promter
 ```
