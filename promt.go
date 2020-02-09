@@ -24,11 +24,15 @@ func MergeOptions(options ...PromterOptions) PromterOptions {
 
 type Promter interface {
 	YesNo(label string) (index int, selection string, err error)
+	YesNoDefault(label, defaultValue string) (index int, selection string, err error)
 	Select(label string, options []string) (index int, selection string, err error)
+	SelectDefault(label, defaultValue string, options []string) (index int, selection string, err error)
 	Text(label string, options ...PromterOptions) (input string, err error)
+	TextDefault(label, defaultValue string, options ...PromterOptions) (input string, err error)
 	OptionalText(label string, options ...PromterOptions) (input string, err error)
-	URLWithDefault(label, defaultValue string, options ...PromterOptions) (url string, err error)
+	OptionalTextDefault(label, defaultValue string, options ...PromterOptions) (input string, err error)
 	URL(label string, options ...PromterOptions) (url string, err error)
+	URLDefault(label, defaultValue string, options ...PromterOptions) (url string, err error)
 }
 
 type promter struct {
@@ -52,8 +56,20 @@ func (p *promter) HandleRetries(err error, cb func(), options ...PromterOptions)
 	}
 }
 
+func LabelWithDefault(label, defaultValue string) string {
+	str := label
+	if strings.TrimSpace(defaultValue) != "" {
+		str = fmt.Sprintf("%s (default: %s)", label, defaultValue)
+	}
+	return str
+}
+
 func (p *promter) YesNo(label string) (index int, selection string, err error) {
 	return p.Select(label, []string{"Yes", "No"})
+}
+
+func (p *promter) YesNoDefault(label, defaultValue string) (index int, selection string, err error) {
+	return p.Select(LabelWithDefault(label, defaultValue), []string{"Yes", "No"})
 }
 
 func (p *promter) Select(label string, options []string) (index int, selection string, err error) {
@@ -63,6 +79,10 @@ func (p *promter) Select(label string, options []string) (index int, selection s
 	}
 	index, _, err = prompt.Run()
 	return index, options[index], err
+}
+
+func (p *promter) SelectDefault(label, defaultValue string, options []string) (index int, selection string, err error) {
+	return p.Select(LabelWithDefault(label, defaultValue), options)
 }
 
 func (p *promter) Text(label string, options ...PromterOptions) (input string, err error) {
@@ -84,12 +104,43 @@ func (p *promter) Text(label string, options ...PromterOptions) (input string, e
 		Validate: validate,
 	}
 
-	notEmpty, err := notEmptyText.Run()
+	input, err = notEmptyText.Run()
 	if err != nil {
 		return "", err
 	}
 
-	return strings.ToLower(notEmpty), nil
+	return input, nil
+}
+
+func (p *promter) TextDefault(label, defaultValue string, options ...PromterOptions) (input string, err error) {
+	defer func() {
+		p.HandleRetries(err, func() {
+			p.TextDefault(label, defaultValue, options...)
+		}, options...)
+	}()
+
+	validate := func(input string) error {
+		if strings.TrimSpace(input) == "" && strings.TrimSpace(defaultValue) == "" {
+			return fmt.Errorf("please provide a text")
+		}
+		return nil
+	}
+
+	notEmptyText := promptui.Prompt{
+		Label:    LabelWithDefault(label, defaultValue),
+		Validate: validate,
+	}
+
+	input, err = notEmptyText.Run()
+	if err != nil {
+		return "", err
+	}
+
+	if strings.TrimSpace(input) == "" {
+		input = defaultValue
+	}
+
+	return input, nil
 }
 
 func (p *promter) OptionalText(label string, options ...PromterOptions) (input string, err error) {
@@ -106,23 +157,19 @@ func (p *promter) OptionalText(label string, options ...PromterOptions) (input s
 	return value, err
 }
 
-func (p *promter) URLWithDefault(label, defaultValue string, options ...PromterOptions) (url string, err error) {
+func (p *promter) OptionalTextDefault(label, defaultValue string, options ...PromterOptions) (input string, err error) {
 	defer func() {
 		p.HandleRetries(err, func() {
-			p.URLWithDefault(label, defaultValue, options...)
+			p.OptionalTextDefault(label, defaultValue, options...)
 		}, options...)
 	}()
 
-	url, err = p.URL(fmt.Sprintf(label, defaultValue), PromterOptions{false})
-	if err != nil {
-		return url, err
-	}
+	input, err = p.OptionalText(LabelWithDefault(label, defaultValue), PromterOptions{false})
 
-	if url == "" {
-		url = defaultValue
+	if strings.TrimSpace(input) == "" {
+		input = defaultValue
 	}
-
-	return strings.ToLower(url), nil
+	return input, err
 }
 
 func (p *promter) URL(label string, options ...PromterOptions) (url string, err error) {
@@ -149,6 +196,25 @@ func (p *promter) URL(label string, options ...PromterOptions) (url string, err 
 	url, err = getURL.Run()
 	if err != nil {
 		return "", err
+	}
+
+	return strings.ToLower(url), nil
+}
+
+func (p *promter) URLDefault(label, defaultValue string, options ...PromterOptions) (url string, err error) {
+	defer func() {
+		p.HandleRetries(err, func() {
+			p.URLDefault(label, defaultValue, options...)
+		}, options...)
+	}()
+
+	url, err = p.URL(LabelWithDefault(label, defaultValue), PromterOptions{false})
+	if err != nil {
+		return url, err
+	}
+
+	if url == "" {
+		url = defaultValue
 	}
 
 	return strings.ToLower(url), nil
